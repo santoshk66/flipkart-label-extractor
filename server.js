@@ -79,10 +79,6 @@ app.post('/split-label-invoice', upload.single('label'), async (req, res) => {
 
     for (let i = 0; i < pages.length; i++) {
       const original = pages[i];
-      if (!(original instanceof PDFPage)) {
-        console.warn(`Skipping page ${i + 1}: Not a valid PDFPage object`);
-        continue;
-      }
 
       let width, height;
       try {
