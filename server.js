@@ -80,24 +80,30 @@ app.post('/split-label-invoice', upload.single('label'), async (req, res) => {
     for (let i = 0; i < pages.length; i++) {
       const original = pages[i];
       if (!(original instanceof PDFPage)) {
-        console.warn(`Skipping invalid page object at index ${i}`);
+        console.warn(`Skipping page ${i + 1}: Not a valid PDFPage object`);
         continue;
       }
 
-      const { width, height } = original.getSize();
-      console.log(`Page ${i + 1} dimensions: ${width}x${height}`);
+      let width, height;
+      try {
+        ({ width, height } = original.getSize());
+        console.log(`Page ${i + 1} dimensions: ${width}x${height}`);
+      } catch (sizeError) {
+        console.warn(`Skipping page ${i + 1}: Failed to get dimensions - ${sizeError.message}`);
+        continue;
+      }
 
       // Validate dimensions
       if (isNaN(width) || isNaN(height) || width <= 0 || height <= 0) {
-        console.warn(`Skipping page ${i + 1} due to invalid dimensions (width: ${width}, height: ${height})`);
+        console.warn(`Skipping page ${i + 1}: Invalid dimensions (width: ${width}, height: ${height})`);
         continue;
       }
 
       try {
-        // Crop margins: 10% from left and right, adjust top/bottom for label/invoice
+        // Crop margins: 10% from left and right, 5% from top/bottom
         const cropMarginX = width * 0.1; // 10% from each side
         const croppedWidth = width * 0.8; // 80% of original width
-        const cropMarginY = height * 0.05; // 5% from top/bottom for fine-tuning
+        const cropMarginY = height * 0.05; // 5% from top/bottom
 
         // Label Page (top ~40% of the page, cropped)
         const labelHeight = height * 0.4;
@@ -124,7 +130,16 @@ app.post('/split-label-invoice', upload.single('label'), async (req, res) => {
         validPagesProcessed += 2;
       } catch (drawError) {
         console.warn(`Failed to process page ${i + 1}: ${drawError.message}`);
-        continue;
+        // Fallback: Add the full page without cropping
+        try {
+          const fullPage = newDoc.addPage([width, height]);
+          fullPage.drawPage(original, { x: 0, y: 0, width, height });
+          console.log(`Added full page ${i + 1} as fallback: ${width}x${height}`);
+          validPagesProcessed += 1;
+        } catch (fallbackError) {
+          console.warn(`Failed to add full page ${i + 1} as fallback: ${fallbackError.message}`);
+          continue;
+        }
       }
     }
 
@@ -134,8 +149,8 @@ app.post('/split-label-invoice', upload.single('label'), async (req, res) => {
 
     console.log(`Total pages in output PDF: ${newDoc.getPageCount()}`);
     const finalPDF = await newDoc.save();
-    if (finalPDF.length === 0) {
-      throw new Error('Generated PDF is empty. No content was rendered.');
+    if (finalPDF.length < 100) { // Arbitrary threshold for empty PDF
+      throw new Error('Generated PDF is empty or too small. No content was rendered.');
     }
 
     const uniqueId = uuidv4();
