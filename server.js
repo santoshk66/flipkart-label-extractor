@@ -60,24 +60,24 @@ for (let i = 0; i < srcDoc.getPageCount(); i++) {
   const { width, height } = page.getSize();
   const embeddedPage = await outputDoc.embedPage(page);
 
-  // 1️⃣ LABEL: Approx top 55% — tightly cropped, no side margin
-  const labelHeight = height * 0.55;
+  // ✅ 1. LABEL (Top ~45%)
+  const labelHeight = height * 0.45;
   const labelPage = outputDoc.addPage([width, labelHeight]);
   labelPage.drawPage(embeddedPage, {
     x: 0,
-    y: -(height - labelHeight), // shift upwards to keep top part
+    y: -(height - labelHeight) // shift up to keep top part
   });
 
-  // 2️⃣ INVOICE: Approx bottom 45% — keep full invoice, no crop
-  const invoiceHeight = height - labelHeight;
-  const invoicePage = outputDoc.addPage([width, invoiceHeight]);
+  // ✅ 2. INVOICE (Re-render full page, no crop or split)
+  const invoicePage = outputDoc.addPage([width, height]);
   invoicePage.drawPage(embeddedPage, {
     x: 0,
-    y: 0 // stay in place to show bottom part of invoice
+    y: 0
   });
 
-  console.log(`Split page ${i + 1} into LABEL + INVOICE`);
+  console.log(`Processed Page ${i + 1}: Label + Invoice`);
 }
+
 
 
     const fileName = `processed_${uuidv4()}.pdf`;
