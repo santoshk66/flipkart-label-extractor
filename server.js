@@ -55,11 +55,27 @@ app.post('/process-labels', upload.single('label'), async (req, res) => {
 
     const totalPages = srcDoc.getPageCount();
 
-    for (let i = 0; i < totalPages; i++) {
-      const [copiedPage] = await outputDoc.copyPages(srcDoc, [i]);
-      outputDoc.addPage(copiedPage);
-      console.log(`Page ${i + 1} copied`);
-    }
+for (let i = 0; i < srcDoc.getPageCount(); i++) {
+  const page = srcDoc.getPage(i);
+  const { width, height } = page.getSize();
+  const embeddedPage = await outputDoc.embedPage(page);
+
+  // --- Split TOP (Label)
+  const labelPage = outputDoc.addPage([width, height / 2]);
+  labelPage.drawPage(embeddedPage, {
+    x: 0,
+    y: -height / 2, // Move full page up to show top half only
+  });
+
+  // --- Split BOTTOM (Invoice)
+  const invoicePage = outputDoc.addPage([width, height / 2]);
+  invoicePage.drawPage(embeddedPage, {
+    x: 0,
+    y: 0 // Draw as-is, but only visible area is bottom half
+  });
+
+  console.log(`Page ${i + 1} split into Label & Invoice`);
+}
 
     const fileName = `processed_${uuidv4()}.pdf`;
     const filePathOutput = path.join(publicDir, fileName);
