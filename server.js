@@ -27,37 +27,24 @@ app.post('/split-label-invoice', upload.single('label'), async (req, res) => {
   try {
     const buffer = await fs.readFile(req.file.path);
     const srcDoc = await PDFDocument.load(buffer);
-    if (srcDoc.isEncrypted) throw new Error('PDF is encrypted.');
-
-    const newDoc = await PDFDocument.create();
     const totalPages = srcDoc.getPageCount();
-    const pageIndices = [...Array(totalPages).keys()];
-    const pages = await srcDoc.copyPages(srcDoc, pageIndices);
+    const newDoc = await PDFDocument.create();
 
-    let processed = 0;
+    for (let i = 0; i < totalPages; i++) {
+      const page = srcDoc.getPage(i);
+      const { width, height } = page.getSize();
+      const embeddedPage = await newDoc.embedPage(page);
 
-    for (let i = 0; i < pages.length; i++) {
-      const original = pages[i];
-      if (!original || typeof original.getSize !== 'function') {
-        console.warn(`Skipping page ${i + 1} due to invalid page object.`);
-        continue;
-      }
-
-      const { width, height } = original.getSize();
-      if (!width || !height || isNaN(width) || isNaN(height)) {
-        console.warn(`Invalid dimensions on page ${i + 1}`);
-        continue;
-      }
-
-      const marginX = width * 0.1, marginY = height * 0.05;
+      const cropMarginX = width * 0.1;
+      const cropMarginY = height * 0.05;
       const usableWidth = width * 0.8;
 
       // Label (top 40%)
       const labelHeight = height * 0.4;
       const labelPage = newDoc.addPage([usableWidth, labelHeight]);
-      labelPage.drawPage(original, {
-        x: -marginX,
-        y: -(height - labelHeight - marginY),
+      labelPage.drawPage(embeddedPage, {
+        x: -cropMarginX,
+        y: -(height - labelHeight - cropMarginY),
         width,
         height
       });
@@ -65,24 +52,21 @@ app.post('/split-label-invoice', upload.single('label'), async (req, res) => {
       // Invoice (bottom 60%)
       const invoiceHeight = height * 0.6;
       const invoicePage = newDoc.addPage([usableWidth, invoiceHeight]);
-      invoicePage.drawPage(original, {
-        x: -marginX,
-        y: -marginY,
+      invoicePage.drawPage(embeddedPage, {
+        x: -cropMarginX,
+        y: -cropMarginY,
         width,
         height
       });
-
-      processed += 2;
     }
 
-    if (processed === 0) throw new Error('No valid pages processed.');
     const outputPdf = await newDoc.save();
-    const outputName = `split_label_invoice_${uuidv4()}.pdf`;
-    const outputPath = path.join(__dirname, 'public', outputName);
+    const fileName = `split_label_invoice_${uuidv4()}.pdf`;
+    const outputPath = path.join(__dirname, 'public', fileName);
     await fs.writeFile(outputPath, outputPdf);
     await fs.unlink(req.file.path).catch(() => {});
 
-    res.json({ status: 'Done', download: `/${outputName}` });
+    res.json({ status: 'success', download: `/${fileName}` });
   } catch (err) {
     await fs.unlink(req.file.path).catch(() => {});
     res.status(500).json({ error: err.message });
