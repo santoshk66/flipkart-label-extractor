@@ -26,7 +26,7 @@ app.post('/process-labels', upload.single('label'), async (req, res) => {
   try {
     const buffer = fs.readFileSync(req.file.path);
     const data = await pdfParse(buffer);
-    const textPerPage = data.text.split(/\f/); // Form feed separation
+    const textPerPage = data.text.split(/\f/); // Form feed separates pages
 
     const srcDoc = await PDFDocument.load(buffer);
     const font = await srcDoc.embedFont(StandardFonts.Helvetica);
@@ -62,7 +62,7 @@ app.post('/process-labels', upload.single('label'), async (req, res) => {
     }
 
     const finalBytes = await outputDoc.save();
-    const fileName = `flipkart_fixed_output_${uuidv4()}.pdf`;
+    const fileName = `flipkart_processed_output_${uuidv4()}.pdf`;
     const filePath = path.join(__dirname, 'public', fileName);
     fs.writeFileSync(filePath, finalBytes);
     fs.unlinkSync(req.file.path);
