@@ -61,18 +61,10 @@ app.post('/process-labels', upload.single('label'), async (req, res) => {
       throw new Error('PDF contains no pages.');
     }
 
-    const data = await pdfParse(buffer).catch(err => {
-      throw new Error(`Failed to parse PDF: ${err.message}`);
-    });
-    const textPerPage = data.text.split(/\f/);
-
     const outputDoc = await PDFDocument.create();
     const font = await outputDoc.embedFont(StandardFonts.Helvetica);
-    const labels = [];
-    const invoices = [];
 
     for (let i = 0; i < srcDoc.getPageCount(); i++) {
-      const pageText = textPerPage[i] || "";
       const originalPage = srcDoc.getPage(i);
       const { width, height } = originalPage.getSize();
 
@@ -85,84 +77,30 @@ app.post('/process-labels', upload.single('label'), async (req, res) => {
       }
 
       const embeddedPage = await outputDoc.embedPage(originalPage);
+      const isLabel = i % 2 === 0; // Odd pages (0-based) as labels, even as invoices
 
-      if (i % 2 === 0) { // Odd pages as potential labels
-        if (pageText.trim().length > 0) {
-          let sku = "Unknown";
-          const match = pageText.match(/SKU\s*[:|\s-]*([A-Za-z0-9-]+)/i) || pageText.match(/([A-Za-z0-9-]{3,})/);
-          if (match && match[1]) {
-            sku = match[1];
-          }
-          labels.push({ embeddedPage, cropWidth, cropHeight, sku });
-          console.log(`Page ${i + 1} identified as label with SKU: ${sku}`);
-        } else {
-          console.log(`Page ${i + 1} skipped: No content`);
-        }
-      } else { // Even pages as potential invoices
-        if (pageText.toLowerCase().includes("tax") || pageText.toLowerCase().includes("invoice")) {
-          invoices.push({ embeddedPage, cropWidth, cropHeight });
-          console.log(`Page ${i + 1} identified as invoice`);
-        } else {
-          console.log(`Page ${i + 1} skipped: No invoice content`);
-        }
-      }
-    }
+      const newPage = outputDoc.addPage([cropWidth, cropHeight]);
+      newPage.drawPage(embeddedPage, {
+        x: -CROP.left,
+        y: -CROP.bottom
+      });
 
-    if (labels.length === 0 && invoices.length === 0) {
-      throw new Error('No valid label or invoice pages found.');
-    }
-
-    // Alternate valid labels and invoices, padding with last item if necessary
-    const maxLength = Math.max(labels.length, invoices.length);
-    for (let i = 0; i < maxLength; i++) {
-      if (i < labels.length) {
-        const { embeddedPage, cropWidth, cropHeight, sku } = labels[i];
-        const labelPage = outputDoc.addPage([cropWidth, cropHeight]);
-        labelPage.drawPage(embeddedPage, {
-          x: -CROP.left,
-          y: -CROP.bottom
-        });
-        labelPage.drawText(`SKU: ${sku}`, {
+      if (isLabel) {
+        newPage.drawText(`SKU: Unknown`, {
           x: 10,
           y: cropHeight - 20,
           size: 10,
           font: font,
           color: rgb(0, 0, 0)
         });
-        console.log(`Added label page ${i + 1} to output`);
-      } else if (labels.length > 0) {
-        const { embeddedPage, cropWidth, cropHeight, sku } = labels[labels.length - 1];
-        const labelPage = outputDoc.addPage([cropWidth, cropHeight]);
-        labelPage.drawPage(embeddedPage, {
-          x: -CROP.left,
-          y: -CROP.bottom
-        });
-        labelPage.drawText(`SKU: ${sku}`, {
-          x: 10,
-          y: cropHeight - 20,
-          size: 10,
-          font: font,
-          color: rgb(0, 0, 0)
-        });
-        console.log(`Added padded label page ${i + 1} to output`);
+        console.log(`Page ${i + 1} added as label`);
+      } else {
+        console.log(`Page ${i + 1} added as invoice`);
       }
-      if (i < invoices.length) {
-        const { embeddedPage, cropWidth, cropHeight } = invoices[i];
-        const invoicePage = outputDoc.addPage([cropWidth, cropHeight]);
-        invoicePage.drawPage(embeddedPage, {
-          x: -CROP.left,
-          y: -CROP.bottom
-        });
-        console.log(`Added invoice page ${i + 1} to output`);
-      } else if (invoices.length > 0) {
-        const { embeddedPage, cropWidth, cropHeight } = invoices[invoices.length - 1];
-        const invoicePage = outputDoc.addPage([cropWidth, cropHeight]);
-        invoicePage.drawPage(embeddedPage, {
-          x: -CROP.left,
-          y: -CROP.bottom
-        });
-        console.log(`Added padded invoice page ${i + 1} to output`);
-      }
+    }
+
+    if (outputDoc.getPageCount() === 0) {
+      throw new Error('No valid pages processed.');
     }
 
     const fileName = `processed_${uuidv4()}.pdf`;
