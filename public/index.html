@@ -1,42 +1,25 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Flipkart Label Tool</title>
+  <title>Split Flipkart Label & Invoice</title>
 </head>
 <body>
-  <h2>Upload Mapping CSV</h2>
-  <input type="file" id="csv"><button onclick="uploadCSV()">Upload</button><br><br>
-
-  <h2>Upload Label PDF</h2>
-  <input type="file" id="pdf"><button onclick="processLabel()">Process Label</button><br><br>
-
-  <div id="downloads" style="display:none;">
-    <h3>Downloads:</h3>
-    <ul>
-      <li><a id="skuPdf" href="/label_with_sku.pdf" download>Label with SKU</a></li>
-      <li><a id="picklist" href="/picklist.csv" download>Picklist CSV</a></li>
-      <li><a id="labelOnly" href="/label_only.pdf" download>Label Only (Thermal)</a></li>
-      <li><a id="invoiceOnly" href="/invoice_only.pdf" download>Invoice Only</a></li>
-    </ul>
+  <h2>Upload Flipkart Label PDF</h2>
+  <input type="file" id="pdf"><button onclick="splitPDF()">Split PDF</button><br><br>
+  <div id="download" style="display:none;">
+    <h3>Result:</h3>
+    <a href="/split_label_invoice.pdf" download>Download Split Label + Invoice PDF</a>
   </div>
 
   <script>
-    async function uploadCSV() {
-      const file = document.getElementById('csv').files[0];
-      const formData = new FormData();
-      formData.append('file', file);
-      await fetch('/upload-mapping', { method: 'POST', body: formData });
-      alert("Mapping uploaded!");
-    }
-
-    async function processLabel() {
+    async function splitPDF() {
       const file = document.getElementById('pdf').files[0];
       const formData = new FormData();
       formData.append('label', file);
-      const res = await fetch('/process-label', { method: 'POST', body: formData });
+      const res = await fetch('/split-label-invoice', { method: 'POST', body: formData });
       const data = await res.json();
-      if (data.downloads) {
-        document.getElementById('downloads').style.display = 'block';
+      if (data.download) {
+        document.getElementById('download').style.display = 'block';
       }
     }
   </script>
