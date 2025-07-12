@@ -32,12 +32,12 @@ const upload = multer({
   }
 });
 
-// Crop dimensions (adjust based on your PDF layout)
+// Crop dimensions (tight cropping for labels and invoices)
 const CROP = {
-  left: 30,
-  right: 30,
-  top: 50,
-  bottom: 50
+  left: 50,   // Increased to remove more side margin
+  right: 50,
+  top: 80,    // Increased to remove more top margin
+  bottom: 80  // Increased to remove more bottom margin
 };
 
 app.post('/process-labels', upload.single('label'), async (req, res) => {
@@ -74,17 +74,20 @@ app.post('/process-labels', upload.single('label'), async (req, res) => {
     ]).then(fonts => fonts[0]);
 
     let sku = "default";
+    let hasLabels = false;
+    let hasInvoices = false;
 
     for (let i = 0; i < srcDoc.getPageCount(); i++) {
       const pageText = textPerPage[i] || "";
       const originalPage = srcDoc.getPage(i);
       const { width, height } = originalPage.getSize();
 
+      // Validate crop dimensions
       const cropWidth = width - CROP.left - CROP.right;
       const cropHeight = height - CROP.top - CROP.bottom;
-
       if (cropWidth <= 0 || cropHeight <= 0) {
-        throw new Error(`Invalid crop dimensions for page ${i + 1}: width=${cropWidth}, height=${cropHeight}`);
+        console.warn(`Skipping page ${i + 1}: Invalid crop dimensions (width=${cropWidth}, height=${cropHeight})`);
+        continue;
       }
 
       const embeddedPage = await Promise.all([
@@ -98,8 +101,9 @@ app.post('/process-labels', upload.single('label'), async (req, res) => {
           x: -CROP.left,
           y: -CROP.bottom
         });
+        hasInvoices = true;
         console.log(`Page ${i + 1} added to invoiceDoc`);
-      } else {
+      } else if (pageText.match(/SKU ID\s*\|\s*Description/)) {
         const labelPage = labelDoc.addPage([cropWidth, cropHeight]);
         labelPage.drawPage(embeddedPage, {
           x: -CROP.left,
@@ -110,18 +114,25 @@ app.post('/process-labels', upload.single('label'), async (req, res) => {
         if (match) sku = match[1];
 
         labelPage.drawText(`SKU: ${sku}`, {
-          x: 20,
-          y: cropHeight - 30,
-          size: 12,
+          x: 10,
+          y: cropHeight - 20,
+          size: 10,
           font: font,
           color: rgb(0, 0, 0)
         });
+        hasLabels = true;
         console.log(`Page ${i + 1} added to labelDoc with SKU: ${sku}`);
+      } else {
+        console.log(`Page ${i + 1} skipped: Not a label or invoice`);
       }
     }
 
-    const labelFileName = labelDoc.getPageCount() > 0 ? `labels_${uuidv4()}.pdf` : null;
-    const invoiceFileName = invoiceDoc.getPageCount() > 0 ? `invoices_${uuidv4()}.pdf` : null;
+    if (!hasLabels && !hasInvoices) {
+      throw new Error('No valid label or invoice pages found in the PDF.');
+    }
+
+    const labelFileName = hasLabels ? `labels_${uuidv4()}.pdf` : null;
+    const invoiceFileName = hasInvoices ? `invoices_${uuidv4()}.pdf` : null;
     const labelFilePath = labelFileName ? path.join(publicDir, labelFileName) : null;
     const invoiceFilePath = invoiceFileName ? path.join(publicDir, invoiceFileName) : null;
 
@@ -134,10 +145,6 @@ app.post('/process-labels', upload.single('label'), async (req, res) => {
       const invoiceBytes = await invoiceDoc.save();
       await fs.writeFile(invoiceFilePath, invoiceBytes);
       console.log(`Invoices saved to: ${invoiceFilePath}`);
-    }
-
-    if (!labelFileName && !invoiceFileName) {
-      throw new Error('No valid pages found to process.');
     }
 
     res.json({
