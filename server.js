@@ -87,23 +87,23 @@ app.post('/process-labels', upload.single('label'), async (req, res) => {
       const embeddedPage = await outputDoc.embedPage(originalPage);
 
       if (i % 2 === 0) { // Odd pages as potential labels
-        if (pageText.trim().length > 0 && !pageText.match(/^(\s|[0-9\s.]+|\`\`\`)+$/)) {
+        if (pageText.trim().length > 0) {
           let sku = "Unknown";
-          const match = pageText.match(/SKU\s*[:|\s-]*([A-Za-z0-9-]+)/i) || pageText.match(/([A-Za-z0-9-]{6,})/);
-          if (match && match[1] && !match[1].match(/^[0-9\s.]+$/)) {
+          const match = pageText.match(/SKU\s*[:|\s-]*([A-Za-z0-9-]+)/i) || pageText.match(/([A-Za-z0-9-]{3,})/);
+          if (match && match[1]) {
             sku = match[1];
           }
           labels.push({ embeddedPage, cropWidth, cropHeight, sku });
           console.log(`Page ${i + 1} identified as label with SKU: ${sku}`);
         } else {
-          console.log(`Page ${i + 1} skipped: No valid label content`);
+          console.log(`Page ${i + 1} skipped: No content`);
         }
       } else { // Even pages as potential invoices
-        if (pageText.includes("Tax Invoice") || pageText.includes("Invoice Date")) {
+        if (pageText.toLowerCase().includes("tax") || pageText.toLowerCase().includes("invoice")) {
           invoices.push({ embeddedPage, cropWidth, cropHeight });
           console.log(`Page ${i + 1} identified as invoice`);
         } else {
-          console.log(`Page ${i + 1} skipped: No valid invoice content`);
+          console.log(`Page ${i + 1} skipped: No invoice content`);
         }
       }
     }
@@ -112,7 +112,7 @@ app.post('/process-labels', upload.single('label'), async (req, res) => {
       throw new Error('No valid label or invoice pages found.');
     }
 
-    // Alternate valid labels and invoices
+    // Alternate valid labels and invoices, padding with last item if necessary
     const maxLength = Math.max(labels.length, invoices.length);
     for (let i = 0; i < maxLength; i++) {
       if (i < labels.length) {
@@ -130,6 +130,21 @@ app.post('/process-labels', upload.single('label'), async (req, res) => {
           color: rgb(0, 0, 0)
         });
         console.log(`Added label page ${i + 1} to output`);
+      } else if (labels.length > 0) {
+        const { embeddedPage, cropWidth, cropHeight, sku } = labels[labels.length - 1];
+        const labelPage = outputDoc.addPage([cropWidth, cropHeight]);
+        labelPage.drawPage(embeddedPage, {
+          x: -CROP.left,
+          y: -CROP.bottom
+        });
+        labelPage.drawText(`SKU: ${sku}`, {
+          x: 10,
+          y: cropHeight - 20,
+          size: 10,
+          font: font,
+          color: rgb(0, 0, 0)
+        });
+        console.log(`Added padded label page ${i + 1} to output`);
       }
       if (i < invoices.length) {
         const { embeddedPage, cropWidth, cropHeight } = invoices[i];
@@ -139,6 +154,14 @@ app.post('/process-labels', upload.single('label'), async (req, res) => {
           y: -CROP.bottom
         });
         console.log(`Added invoice page ${i + 1} to output`);
+      } else if (invoices.length > 0) {
+        const { embeddedPage, cropWidth, cropHeight } = invoices[invoices.length - 1];
+        const invoicePage = outputDoc.addPage([cropWidth, cropHeight]);
+        invoicePage.drawPage(embeddedPage, {
+          x: -CROP.left,
+          y: -CROP.bottom
+        });
+        console.log(`Added padded invoice page ${i + 1} to output`);
       }
     }
 
