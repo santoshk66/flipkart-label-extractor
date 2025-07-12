@@ -3,104 +3,49 @@ const multer = require('multer');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
-const csv = require('csv-parser');
-const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
-const pdfParse = require('pdf-parse');
-const { parse } = require('json2csv');
+const { PDFDocument } = require('pdf-lib');
 
 const app = express();
 app.use(cors());
 app.use(express.static(path.join(__dirname, 'public')));
 const upload = multer({ dest: 'uploads/' });
 
-let productSkuMap = {};
-const DEFAULT_SKU = "DEFAULT-SKU";
-
-app.post('/upload-mapping', upload.single('file'), (req, res) => {
-  fs.createReadStream(req.file.path)
-    .pipe(csv())
-    .on('data', (row) => {
-      productSkuMap[row['Product Name'].toLowerCase()] = row['SKU'];
-    })
-    .on('end', () => {
-      fs.unlinkSync(req.file.path);
-      res.json({ status: 'Mapping uploaded successfully' });
-    });
-});
-
-app.post('/process-label', upload.single('label'), async (req, res) => {
+app.post('/split-label-invoice', upload.single('label'), async (req, res) => {
   const buffer = fs.readFileSync(req.file.path);
-  const parsed = await pdfParse(buffer);
-  const pdfDoc = await PDFDocument.load(buffer);
-  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const pages = pdfDoc.getPages();
+  const srcDoc = await PDFDocument.load(buffer);
+  const newDoc = await PDFDocument.create();
 
-  const productNames = extractProductNames(parsed.text);
-  const picklist = [];
+  const totalPages = srcDoc.getPages().length;
+  const pages = await srcDoc.copyPages(srcDoc, [...Array(totalPages).keys()]);
 
   for (let i = 0; i < pages.length; i++) {
-    const productName = productNames[i] || "UNKNOWN PRODUCT";
-    const matchedSku = matchToSku(productName);
-    picklist.push({
-      "Order ID": `ORDER${1000 + i}`,
-      "Product Name": productName,
-      "SKU": matchedSku,
-      "Buyer": `Customer ${i + 1}`,
-      "Qty": 1
+    const original = pages[i];
+
+    // Dimensions
+    const { width, height } = original.getSize();
+
+    // === Label Page ===
+    const labelPage = newDoc.addPage([width * 0.9, height * 0.4]); // keep left/top part
+    labelPage.drawPage(original, {
+      x: -width * 0.05,   // slight crop from left
+      y: -height * 0.6,   // crop bottom
     });
-    pages[i].drawText(`SKU: ${matchedSku}`, {
-      x: 50,
-      y: 25,
-      size: 12,
-      font,
-      color: rgb(0, 0, 0),
+
+    // === Invoice Page ===
+    const invoicePage = newDoc.addPage([width * 0.9, height * 0.55]); // keep bottom part
+    invoicePage.drawPage(original, {
+      x: -width * 0.05,  // same crop left
+      y: -height * 0.05, // crop top just a bit
     });
   }
 
-  const finalPdf = await pdfDoc.save();
-  const picklistCSV = parse(picklist);
-
-  fs.writeFileSync("public/picklist.csv", picklistCSV);
-
-  const mergedBuffer = Buffer.from(finalPdf);
-  fs.writeFileSync("public/label_with_sku.pdf", mergedBuffer);
-
-  // Crop simulated zones (static cropping)
-  const croppedLabel = await cropRegion(pdfDoc, 0, { x: 0, y: 400, width: 600, height: 400 }); // label area
-  const croppedInvoice = await cropRegion(pdfDoc, 0, { x: 0, y: 0, width: 600, height: 400 }); // invoice area
-
-  fs.writeFileSync("public/label_only.pdf", croppedLabel);
-  fs.writeFileSync("public/invoice_only.pdf", croppedInvoice);
-
+  const finalPDF = await newDoc.save();
+  const outputPath = "public/split_label_invoice.pdf";
+  fs.writeFileSync(outputPath, finalPDF);
   fs.unlinkSync(req.file.path);
-  res.json({ status: "Processed", downloads: ["/label_with_sku.pdf", "/picklist.csv", "/label_only.pdf", "/invoice_only.pdf"] });
+
+  res.json({ status: "Done", download: "/split_label_invoice.pdf" });
 });
 
-async function cropRegion(pdfDoc, pageIndex, region) {
-  const [srcPdf] = await PDFDocument.create().copyPages(pdfDoc, [pageIndex]);
-  const newDoc = await PDFDocument.create();
-  const page = newDoc.addPage([region.width, region.height]);
-  page.drawPage(srcPdf, {
-    x: -region.x,
-    y: -region.y
-  });
-  return await newDoc.save();
-}
-
-function extractProductNames(text) {
-  const lines = text.split('\n');
-  return lines.filter(line => line.toLowerCase().includes("maizic smarthome"));
-}
-
-function matchToSku(productLine) {
-  if (Object.keys(productSkuMap).length === 0) return DEFAULT_SKU;
-  for (let key of Object.keys(productSkuMap)) {
-    if (productLine.toLowerCase().includes(key)) {
-      return productSkuMap[key];
-    }
-  }
-  return DEFAULT_SKU;
-}
-
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => console.log("Server running on port " + PORT));
