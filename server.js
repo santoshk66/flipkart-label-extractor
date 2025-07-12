@@ -32,7 +32,8 @@ app.post('/split-label-invoice', upload.single('label'), async (req, res) => {
 
     const newDoc = await PDFDocument.create();
     const totalPages = srcDoc.getPageCount();
-    const pages = await srcDoc.copyPages(srcDoc, [...Array(totalPages).keys()]);
+    const pageIndices = [...Array(totalPages).keys()];
+    const pages = await srcDoc.copyPages(srcDoc, pageIndices);
     let processed = 0;
 
     for (let i = 0; i < pages.length; i++) {
