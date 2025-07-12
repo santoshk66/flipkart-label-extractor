@@ -49,7 +49,7 @@ app.post('/process-labels', upload.single('label'), async (req, res) => {
     return res.status(400).json({ error: 'No file uploaded.' });
   }
 
-  const filePath = req.file.path;
+  const filePath = req.file.path; // Define filePath here
   try {
     console.log('Processing file:', filePath);
     const buffer = await fs.readFile(filePath);
@@ -137,10 +137,10 @@ app.post('/process-labels', upload.single('label'), async (req, res) => {
     }
 
     const fileName = `processed_${uuidv4()}.pdf`;
-    const filePath = path.join(publicDir, fileName);
+    const filePathOutput = path.join(publicDir, fileName); // Use a different variable name to avoid conflict
     const bytes = await outputDoc.save();
-    await fs.writeFile(filePath, bytes);
-    console.log(`Output saved to: ${filePath}`);
+    await fs.writeFile(filePathOutput, bytes);
+    console.log(`Output saved to: ${filePathOutput}`);
 
     res.json({
       status: 'success',
@@ -150,7 +150,10 @@ app.post('/process-labels', upload.single('label'), async (req, res) => {
     console.error('Processing error:', err);
     res.status(500).json({ error: `Failed to process PDF: ${err.message}` });
   } finally {
-    await fs.unlink(filePath).catch(err => console.error('Error deleting uploaded file:', err));
+    // Only attempt to delete filePath if it was defined
+    if (filePath) {
+      await fs.unlink(filePath).catch(err => console.error('Error deleting uploaded file:', err));
+    }
   }
 });
 
