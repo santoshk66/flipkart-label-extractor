@@ -1,30 +1,30 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Flipkart Label Splitter</title>
+  <title>Flipkart Label Split</title>
 </head>
 <body>
   <h2>Upload Flipkart Label PDF</h2>
   <input type="file" id="pdf">
-  <button onclick="splitPDF()">Split PDF</button>
-  <div id="download" style="display:none;">
+  <button onclick="upload()">Split PDF</button>
+  <div id="result" style="display:none;">
     <h3>Download:</h3>
-    <a id="downloadLink" href="#" download>Click here</a>
+    <a id="link" href="#" target="_blank">Download PDF</a>
   </div>
 
   <script>
-    async function splitPDF() {
-      const file = document.getElementById('pdf').files[0];
-      if (!file) return alert("Please choose a file.");
-      const formData = new FormData();
-      formData.append('label', file);
-      const res = await fetch('/split-label-invoice', { method: 'POST', body: formData });
+    async function upload() {
+      const file = document.getElementById("pdf").files[0];
+      if (!file) return alert("Please choose a PDF");
+      const form = new FormData();
+      form.append("label", file);
+      const res = await fetch("/split-label-invoice", { method: "POST", body: form });
       const data = await res.json();
       if (data.download) {
-        document.getElementById('downloadLink').href = data.download;
-        document.getElementById('download').style.display = 'block';
+        document.getElementById("link").href = data.download;
+        document.getElementById("result").style.display = "block";
       } else {
-        alert("Error: " + data.error);
+        alert("Failed: " + data.error);
       }
     }
   </script>
