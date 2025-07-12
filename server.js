@@ -11,9 +11,13 @@ app.use(cors());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Ensure directories exist
+const publicDir = path.join(__dirname, 'public');
+const uploadsDir = path.join(__dirname, 'uploads');
+
 const ensureDir = async (dir) => {
   try {
     await fs.mkdir(dir, { recursive: true });
+    console.log(`Directory created: ${dir}`);
   } catch (err) {
     console.error(`Failed to create directory ${dir}:`, err);
   }
@@ -21,12 +25,12 @@ const ensureDir = async (dir) => {
 
 // Initialize directories
 Promise.all([
-  ensureDir(path.join(__dirname, 'public')),
-  ensureDir(path.join(__dirname, 'uploads'))
+  ensureDir(publicDir),
+  ensureDir(uploadsDir)
 ]);
 
 const upload = multer({
-  dest: 'uploads/',
+  dest: uploadsDir,
   fileFilter: (req, file, cb) => {
     if (file.mimetype === 'application/pdf') {
       cb(null, true);
@@ -38,20 +42,28 @@ const upload = multer({
 
 app.post('/split-label-invoice', upload.single('label'), async (req, res) => {
   if (!req.file) {
+    console.error('No file uploaded');
     return res.status(400).json({ error: 'No PDF file uploaded.' });
   }
 
   try {
+    console.log(`Processing file: ${req.file.path}`);
     const buffer = await fs.readFile(req.file.path);
-    const srcDoc = await PDFDocument.load(buffer);
-    const newDoc = await PDFDocument.create();
+    console.log('File read successfully');
 
+    const srcDoc = await PDFDocument.load(buffer, { ignoreEncryption: false });
+    console.log('PDF loaded successfully');
+
+    const newDoc = await PDFDocument.create();
     const totalPages = srcDoc.getPages().length;
+    console.log(`Total pages: ${totalPages}`);
+
     const pages = await srcDoc.copyPages(srcDoc, [...Array(totalPages).keys()]);
 
     for (let i = 0; i < pages.length; i++) {
       const original = pages[i];
       const { width, height } = original.getSize();
+      console.log(`Page ${i + 1} dimensions: ${width}x${height}`);
 
       // Label Page (top 40% of the page)
       const labelPage = newDoc.addPage([width * 0.9, height * 0.4]);
@@ -70,7 +82,8 @@ app.post('/split-label-invoice', upload.single('label'), async (req, res) => {
 
     const finalPDF = await newDoc.save();
     const uniqueId = uuidv4();
-    const outputPath = path.join(__dirname, 'public', `split_label_invoice_${uniqueId}.pdf`);
+    const outputPath = path.join(publicDir, `split_label_invoice_${uniqueId}.pdf`);
+    console.log(`Writing output to: ${outputPath}`);
     await fs.writeFile(outputPath, finalPDF);
 
     // Clean up uploaded file
@@ -78,10 +91,10 @@ app.post('/split-label-invoice', upload.single('label'), async (req, res) => {
 
     res.json({ status: 'Done', download: `/split_label_invoice_${uniqueId}.pdf` });
   } catch (error) {
-    console.error('Error processing PDF:', error);
+    console.error('Error processing PDF:', error.message, error.stack);
     // Clean up uploaded file on error
     await fs.unlink(req.file.path).catch(err => console.error('Failed to delete temp file:', err));
-    res.status(500).json({ error: 'Failed to process PDF.' });
+    res.status(500).json({ error: `Failed to process PDF: ${error.message}` });
   }
 });
 
