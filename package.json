@@ -1,5 +1,5 @@
 {
-  "name": "flipkart-label-extractor",
+  "name": "flipkart-label-tool",
   "version": "1.0.0",
   "scripts": {
     "start": "node server.js"
