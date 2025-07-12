@@ -32,12 +32,12 @@ const upload = multer({
   }
 });
 
-// Crop dimensions (tight cropping for labels and invoices)
+// Crop dimensions (tighter cropping for labels and invoices)
 const CROP = {
-  left: 50,
-  right: 50,
-  top: 80,
-  bottom: 80
+  left: 60,
+  right: 60,
+  top: 100,
+  bottom: 100
 };
 
 app.post('/process-labels', upload.single('label'), async (req, res) => {
@@ -49,7 +49,7 @@ app.post('/process-labels', upload.single('label'), async (req, res) => {
     return res.status(400).json({ error: 'No file uploaded.' });
   }
 
-  const filePath = req.file.path; // Define filePath here
+  const filePath = req.file.path;
   try {
     console.log('Processing file:', filePath);
     const buffer = await fs.readFile(filePath);
@@ -69,11 +69,6 @@ app.post('/process-labels', upload.single('label'), async (req, res) => {
     const outputDoc = await PDFDocument.create();
     const font = await outputDoc.embedFont(StandardFonts.Helvetica);
 
-    // Separate labels and invoices
-    const labels = [];
-    const invoices = [];
-    let sku = "default";
-
     for (let i = 0; i < srcDoc.getPageCount(); i++) {
       const pageText = textPerPage[i] || "";
       const originalPage = srcDoc.getPage(i);
@@ -88,56 +83,41 @@ app.post('/process-labels', upload.single('label'), async (req, res) => {
       }
 
       const embeddedPage = await outputDoc.embedPage(originalPage);
+      const isLabel = i % 2 === 0; // Odd pages (0-based index) are labels
+      const pageType = isLabel ? 'label' : 'invoice';
 
-      if (pageText.includes("Tax Invoice")) {
-        invoices.push({ embeddedPage, cropWidth, cropHeight });
-        console.log(`Page ${i + 1} identified as invoice`);
-      } else if (pageText.match(/SKU ID\s*\|\s*Description/)) {
-        const match = pageText.match(/SKU ID\s*\|\s*Description.*?(\w+)/);
-        if (match) sku = match[1];
-        labels.push({ embeddedPage, cropWidth, cropHeight, sku });
-        console.log(`Page ${i + 1} identified as label with SKU: ${sku}`);
-      } else {
-        console.log(`Page ${i + 1} skipped: Not a label or invoice`);
-      }
-    }
+      const newPage = outputDoc.addPage([cropWidth, cropHeight]);
+      newPage.drawPage(embeddedPage, {
+        x: -CROP.left,
+        y: -CROP.bottom
+      });
 
-    if (labels.length === 0 && invoices.length === 0) {
-      throw new Error('No valid label or invoice pages found in the PDF.');
-    }
+      if (isLabel) {
+        let sku = "default";
+        const match = pageText.match(/SKU\s*[:|\s]\s*([A-Za-z0-9-]+)/);
+        if (match && match[1] && match[1].toLowerCase() !== 'qty') {
+          sku = match[1];
+        }
 
-    // Alternate labels and invoices
-    const maxLength = Math.max(labels.length, invoices.length);
-    for (let i = 0; i < maxLength; i++) {
-      if (i < labels.length) {
-        const { embeddedPage, cropWidth, cropHeight, sku } = labels[i];
-        const labelPage = outputDoc.addPage([cropWidth, cropHeight]);
-        labelPage.drawPage(embeddedPage, {
-          x: -CROP.left,
-          y: -CROP.bottom
-        });
-        labelPage.drawText(`SKU: ${sku}`, {
+        newPage.drawText(`SKU: ${sku}`, {
           x: 10,
           y: cropHeight - 20,
           size: 10,
           font: font,
           color: rgb(0, 0, 0)
         });
-        console.log(`Added label page ${i + 1} to output`);
-      }
-      if (i < invoices.length) {
-        const { embeddedPage, cropWidth, cropHeight } = invoices[i];
-        const invoicePage = outputDoc.addPage([cropWidth, cropHeight]);
-        invoicePage.drawPage(embeddedPage, {
-          x: -CROP.left,
-          y: -CROP.bottom
-        });
-        console.log(`Added invoice page ${i + 1} to output`);
+        console.log(`Page ${i + 1} added as label with SKU: ${sku}`);
+      } else {
+        console.log(`Page ${i + 1} added as invoice`);
       }
     }
 
+    if (outputDoc.getPageCount() === 0) {
+      throw new Error('No valid pages processed.');
+    }
+
     const fileName = `processed_${uuidv4()}.pdf`;
-    const filePathOutput = path.join(publicDir, fileName); // Use a different variable name to avoid conflict
+    const filePathOutput = path.join(publicDir, fileName);
     const bytes = await outputDoc.save();
     await fs.writeFile(filePathOutput, bytes);
     console.log(`Output saved to: ${filePathOutput}`);
@@ -150,7 +130,6 @@ app.post('/process-labels', upload.single('label'), async (req, res) => {
     console.error('Processing error:', err);
     res.status(500).json({ error: `Failed to process PDF: ${err.message}` });
   } finally {
-    // Only attempt to delete filePath if it was defined
     if (filePath) {
       await fs.unlink(filePath).catch(err => console.error('Error deleting uploaded file:', err));
     }
