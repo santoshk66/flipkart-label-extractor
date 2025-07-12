@@ -60,22 +60,25 @@ for (let i = 0; i < srcDoc.getPageCount(); i++) {
   const { width, height } = page.getSize();
   const embeddedPage = await outputDoc.embedPage(page);
 
-  // --- Split TOP (Label)
-  const labelPage = outputDoc.addPage([width, height / 2]);
+  // 1️⃣ LABEL: Approx top 55% — tightly cropped, no side margin
+  const labelHeight = height * 0.55;
+  const labelPage = outputDoc.addPage([width, labelHeight]);
   labelPage.drawPage(embeddedPage, {
     x: 0,
-    y: -height / 2, // Move full page up to show top half only
+    y: -(height - labelHeight), // shift upwards to keep top part
   });
 
-  // --- Split BOTTOM (Invoice)
-  const invoicePage = outputDoc.addPage([width, height / 2]);
+  // 2️⃣ INVOICE: Approx bottom 45% — keep full invoice, no crop
+  const invoiceHeight = height - labelHeight;
+  const invoicePage = outputDoc.addPage([width, invoiceHeight]);
   invoicePage.drawPage(embeddedPage, {
     x: 0,
-    y: 0 // Draw as-is, but only visible area is bottom half
+    y: 0 // stay in place to show bottom part of invoice
   });
 
-  console.log(`Page ${i + 1} split into Label & Invoice`);
+  console.log(`Split page ${i + 1} into LABEL + INVOICE`);
 }
+
 
     const fileName = `processed_${uuidv4()}.pdf`;
     const filePathOutput = path.join(publicDir, fileName);
