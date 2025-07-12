@@ -54,25 +54,43 @@ app.post('/split-label-invoice', upload.single('label'), async (req, res) => {
     const srcDoc = await PDFDocument.load(buffer, { ignoreEncryption: false });
     console.log('PDF loaded successfully');
 
-    const newDoc = await PDFDocument.create();
-    const totalPages = srcDoc.getPages().length;
+    if (srcDoc.isEncrypted) {
+      throw new Error('Uploaded PDF is encrypted. Please upload an unencrypted PDF.');
+    }
+
+    const totalPages = srcDoc.getPageCount();
     console.log(`Total pages: ${totalPages}`);
 
-    const pages = await srcDoc.copyPages(srcDoc, [...Array(totalPages).keys()]);
+    if (totalPages === 0) {
+      throw new Error('PDF has no pages.');
+    }
+
+    const newDoc = await PDFDocument.create();
+    const pageIndices = [...Array(totalPages).keys()];
+    const pages = await srcDoc.copyPages(srcDoc, pageIndices);
+    console.log(`Copied ${pages.length} pages`);
 
     for (let i = 0; i < pages.length; i++) {
       const original = pages[i];
+      if (!original || typeof original.getSize !== 'function') {
+        throw new Error(`Invalid page object at index ${i}`);
+      }
+
       const { width, height } = original.getSize();
       console.log(`Page ${i + 1} dimensions: ${width}x${height}`);
 
+      // Validate dimensions
+      if (isNaN(width) || isNaN(height) || width <= 0 || height <= 0) {
+        throw new Error(`Invalid page dimensions for page ${i + 1} (width: ${width}, height: ${height})`)
+
       // Label Page (top 40% of the page)
-      const labelPage = newDoc.addPage([width * 0.9, height * 0.4]);
+      const labelPage = newDocViradPage([width * 0.9, height * 0.4]);
       labelPage.drawPage(original, {
         x: -width * 0.05, // slight crop from left
         y: -height * 0.6  // crop bottom
       });
 
-      // Invoice Page (bottom 55% of the page)
+      // Invoice Page bottom 55% of the page)
       const invoicePage = newDoc.addPage([width * 0.9, height * 0.55]);
       invoicePage.drawPage(original, {
         x: -width * 0.05, // slight crop left
