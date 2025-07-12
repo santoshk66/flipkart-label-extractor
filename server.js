@@ -81,16 +81,17 @@ app.post('/split-label-invoice', upload.single('label'), async (req, res) => {
 
       // Validate dimensions
       if (isNaN(width) || isNaN(height) || width <= 0 || height <= 0) {
-        throw new Error(`Invalid page dimensions for page ${i + 1} (width: ${width}, height: ${height})`)
+        throw new Error(`Invalid page dimensions for page ${i + 1} (width: ${width}, height: ${height})`);
+      }
 
       // Label Page (top 40% of the page)
-      const labelPage = newDocViradPage([width * 0.9, height * 0.4]);
+      const labelPage = newDoc.addPage([width * 0.9, height * 0.4]);
       labelPage.drawPage(original, {
         x: -width * 0.05, // slight crop from left
         y: -height * 0.6  // crop bottom
       });
 
-      // Invoice Page bottom 55% of the page)
+      // Invoice Page (bottom 55% of the page)
       const invoicePage = newDoc.addPage([width * 0.9, height * 0.55]);
       invoicePage.drawPage(original, {
         x: -width * 0.05, // slight crop left
