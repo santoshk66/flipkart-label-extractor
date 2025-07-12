@@ -11,59 +11,67 @@ const app = express();
 app.use(cors());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Ensure public directory exists
-const ensurePublicDir = async () => {
-  const publicDir = path.join(__dirname, 'public');
+// Ensure directories exist
+const ensureDir = async (dir) => {
   try {
-    await fs.mkdir(publicDir, { recursive: true });
+    await fs.mkdir(dir, { recursive: true });
+    console.log(`Directory ensured: ${dir}`);
   } catch (err) {
-    console.error('Error creating public directory:', err);
-  }
-};
-
-// Ensure uploads directory exists
-const ensureUploadsDir = async () => {
-  const uploadsDir = path.join(__dirname, 'Uploads');
-  try {
-    await fs.mkdir(uploadsDir, { recursive: true });
-  } catch (err) {
-    console.error('Error creating uploads directory:', err);
+    console.error(`Error creating directory ${dir}:`, err);
   }
 };
 
 const upload = multer({
   dest: 'Uploads/',
   fileFilter: (req, file, cb) => {
-    if (file.mimetype === 'application/pdf') cb(null, true);
-    else cb(new Error('Only PDF files are allowed'), false);
+    if (file.mimetype === 'application/pdf') {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF files are allowed'), false);
+    }
   }
 });
 
-// Crop dimensions (adjust these values based on your PDF layout)
+// Crop dimensions (adjust based on your PDF layout)
 const CROP = {
-  left: 30,   // Pixels to crop from left
-  right: 30,  // Pixels to crop from right
-  top: 50,    // Pixels to crop from top
-  bottom: 50  // Pixels to crop from bottom
+  left: 30,
+  right: 30,
+  top: 50,
+  bottom: 50
 };
 
 app.post('/process-labels', upload.single('label'), async (req, res) => {
-  await ensurePublicDir();
-  await ensureUploadsDir();
+  const publicDir = path.join(__dirname, 'public');
+  const uploadsDir = path.join(__dirname, 'Uploads');
+  await Promise.all([ensureDir(publicDir), ensureDir(uploadsDir)]);
 
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded.' });
   }
 
+  const filePath = req.file.path;
   try {
-    const buffer = await fs.readFile(req.file.path);
-    const data = await pdfParse(buffer);
+    console.log('Processing file:', filePath);
+    const buffer = await fs.readFile(filePath);
+    const srcDoc = await PDFDocument.load(buffer).catch(err => {
+      throw new Error(`Failed to load PDF: ${err.message}`);
+    });
+
+    if (srcDoc.getPageCount() === 0) {
+      throw new Error('PDF contains no pages.');
+    }
+
+    const data = await pdfParse(buffer).catch(err => {
+      throw new Error(`Failed to parse PDF: ${err.message}`);
+    });
     const textPerPage = data.text.split(/\f/);
 
-    const srcDoc = await PDFDocument.load(buffer);
-    const font = await srcDoc.embedFont(StandardFonts.Helvetica);
     const labelDoc = await PDFDocument.create();
     const invoiceDoc = await PDFDocument.create();
+    const font = await Promise.all([
+      labelDoc.embedFont(StandardFonts.Helvetica),
+      invoiceDoc.embedFont(StandardFonts.Helvetica)
+    ]).then(fonts => fonts[0]);
 
     let sku = "default";
 
@@ -71,20 +79,18 @@ app.post('/process-labels', upload.single('label'), async (req, res) => {
       const pageText = textPerPage[i] || "";
       const originalPage = srcDoc.getPage(i);
       const { width, height } = originalPage.getSize();
-      
-      // Calculate cropped dimensions
+
       const cropWidth = width - CROP.left - CROP.right;
       const cropHeight = height - CROP.top - CROP.bottom;
 
       if (cropWidth <= 0 || cropHeight <= 0) {
-        throw new Error('Crop dimensions result in invalid page size');
+        throw new Error(`Invalid crop dimensions for page ${i + 1}: width=${cropWidth}, height=${cropHeight}`);
       }
 
-      const embedded = await Promise.all([
+      const embeddedPage = await Promise.all([
         labelDoc.embedPage(originalPage),
         invoiceDoc.embedPage(originalPage)
-      ]);
-      const embeddedPage = embedded[0]; // Same for both docs
+      ]).then(pages => pages[0]);
 
       if (pageText.includes("Tax Invoice")) {
         const invoicePage = invoiceDoc.addPage([cropWidth, cropHeight]);
@@ -92,6 +98,7 @@ app.post('/process-labels', upload.single('label'), async (req, res) => {
           x: -CROP.left,
           y: -CROP.bottom
         });
+        console.log(`Page ${i + 1} added to invoiceDoc`);
       } else {
         const labelPage = labelDoc.addPage([cropWidth, cropHeight]);
         labelPage.drawPage(embeddedPage, {
@@ -109,42 +116,48 @@ app.post('/process-labels', upload.single('label'), async (req, res) => {
           font: font,
           color: rgb(0, 0, 0)
         });
+        console.log(`Page ${i + 1} added to labelDoc with SKU: ${sku}`);
       }
     }
 
-    // Save both PDFs
-    const labelFileName = `labels_${uuidv4()}.pdf`;
-    const invoiceFileName = `invoices_${uuidv4()}.pdf`;
-    const labelFilePath = path.join(__dirname, 'public', labelFileName);
-    const invoiceFilePath = path.join(__dirname, 'public', invoiceFileName);
+    const labelFileName = labelDoc.getPageCount() > 0 ? `labels_${uuidv4()}.pdf` : null;
+    const invoiceFileName = invoiceDoc.getPageCount() > 0 ? `invoices_${uuidv4()}.pdf` : null;
+    const labelFilePath = labelFileName ? path.join(publicDir, labelFileName) : null;
+    const invoiceFilePath = invoiceFileName ? path.join(publicDir, invoiceFileName) : null;
 
-    if (labelDoc.getPageCount() > 0) {
+    if (labelFilePath) {
       const labelBytes = await labelDoc.save();
       await fs.writeFile(labelFilePath, labelBytes);
+      console.log(`Labels saved to: ${labelFilePath}`);
     }
-    if (invoiceDoc.getPageCount() > 0) {
+    if (invoiceFilePath) {
       const invoiceBytes = await invoiceDoc.save();
       await fs.writeFile(invoiceFilePath, invoiceBytes);
+      console.log(`Invoices saved to: ${invoiceFilePath}`);
     }
 
-    // Clean up uploaded file
-    await fs.unlink(req.file.path).catch(err => console.error('Error deleting uploaded file:', err));
+    if (!labelFileName && !invoiceFileName) {
+      throw new Error('No valid pages found to process.');
+    }
 
     res.json({
       status: 'success',
-      labelDownload: labelDoc.getPageCount() > 0 ? `/${labelFileName}` : null,
-      invoiceDownload: invoiceDoc.getPageCount() > 0 ? `/${invoiceFileName}` : null
+      labelDownload: labelFileName ? `/${labelFileName}` : null,
+      invoiceDownload: invoiceFileName ? `/${invoiceFileName}` : null
     });
   } catch (err) {
     console.error('Processing error:', err);
-    await fs.unlink(req.file.path).catch(() => {});
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: `Failed to process PDF: ${err.message}` });
+  } finally {
+    await fs.unlink(filePath).catch(err => console.error('Error deleting uploaded file:', err));
   }
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
-  ensurePublicDir();
-  ensureUploadsDir();
+  await Promise.all([
+    ensureDir(path.join(__dirname, 'public')),
+    ensureDir(path.join(__dirname, 'Uploads'))
+  ]);
 });
