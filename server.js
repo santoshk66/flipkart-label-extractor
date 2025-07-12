@@ -56,38 +56,31 @@ app.post('/process-labels', upload.single('label'), async (req, res) => {
     const totalPages = srcDoc.getPageCount();
 
     for (let i = 0; i < srcDoc.getPageCount(); i++) {
-      const page = srcDoc.getPage(i);
-      const { width, height } = page.getSize();
-      const embeddedPage = await outputDoc.embedPage(page);
-    
-      const labelHeight = 450;
-    
-      // ✅ LABEL PAGE
-      const labelPage = outputDoc.addPage([width, labelHeight]);
-      labelPage.drawPage(embeddedPage, {
-        x: 0,
-        y: -(height - labelHeight)
-      });
-    
-      // ✅ INVOICE PAGE (full page with top masked)
-      const invoicePage = outputDoc.addPage([width, height]);
-    
-      invoicePage.drawPage(embeddedPage, {
-        x: 0,
-        y: 0
-      });
-    
-      // Cover the label area with white box
-      invoicePage.drawRectangle({
-        x: 0,
-        y: height - labelHeight,
-        width: width,
-        height: labelHeight,
-        color: rgb(1, 1, 1), // white color
-      });
-    
-      console.log(`Processed Page ${i + 1} into Label and Full Invoice`);
-    }
+  const page = srcDoc.getPage(i);
+  const { width, height } = page.getSize();
+  const embeddedPage = await outputDoc.embedPage(page);
+
+  const labelHeight = 460; // top portion
+  const invoiceStartY = height - labelHeight;
+  const invoiceHeight = labelHeight > height ? height : height - labelHeight;
+
+  // ✅ 1. LABEL page (top cropped)
+  const labelPage = outputDoc.addPage([width, labelHeight]);
+  labelPage.drawPage(embeddedPage, {
+    x: 0,
+    y: -invoiceStartY
+  });
+
+  // ✅ 2. INVOICE page (crop bottom portion only — no masking!)
+  const invoicePage = outputDoc.addPage([width, invoiceHeight]);
+  invoicePage.drawPage(embeddedPage, {
+    x: 0,
+    y: 0
+  });
+
+  console.log(`Processed Page ${i + 1} into LABEL and full INVOICE (not masked)`);
+}
+
 
     const fileName = `processed_${uuidv4()}.pdf`;
     const filePathOutput = path.join(publicDir, fileName);
