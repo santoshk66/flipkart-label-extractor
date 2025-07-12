@@ -53,30 +53,12 @@ app.post('/process-labels', upload.single('label'), async (req, res) => {
     const srcDoc = await PDFDocument.load(buffer);
     const outputDoc = await PDFDocument.create();
 
-    // ✅ Define CROP map for label/invoice pages
-    const CROP = {
-      label: { left: 35, right: 35, top: 20, bottom: 20 },
-      invoice: { left: 20, right: 20, top: 10, bottom: 10 }
-    };
+    const totalPages = srcDoc.getPageCount();
 
-    for (let i = 0; i < srcDoc.getPageCount(); i++) {
-      const originalPage = srcDoc.getPage(i);
-      const { width, height } = originalPage.getSize();
-      const embeddedPage = await outputDoc.embedPage(originalPage);
-
-      const isLabel = i % 2 === 0;
-      const crop = isLabel ? CROP.label : CROP.invoice;
-
-      const cropWidth = width - crop.left - crop.right;
-      const cropHeight = height - crop.top - crop.bottom;
-
-      const newPage = outputDoc.addPage([cropWidth, cropHeight]);
-      newPage.drawPage(embeddedPage, {
-        x: -crop.left,
-        y: -crop.bottom
-      });
-
-      console.log(`Page ${i + 1} processed as ${isLabel ? 'Label' : 'Invoice'}`);
+    for (let i = 0; i < totalPages; i++) {
+      const [copiedPage] = await outputDoc.copyPages(srcDoc, [i]);
+      outputDoc.addPage(copiedPage);
+      console.log(`Page ${i + 1} copied`);
     }
 
     const fileName = `processed_${uuidv4()}.pdf`;
