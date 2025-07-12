@@ -54,36 +54,25 @@ app.post('/process-labels', upload.single('label'), async (req, res) => {
     const outputDoc = await PDFDocument.create();
     const totalPages = srcDoc.getPageCount();
 
-    for (let i = 0; i < totalPages; i++) {
-      const originalPage = srcDoc.getPage(i);
-      const { width, height } = originalPage.getSize();
+for (let i = 0; i < srcDoc.getPageCount(); i++) {
+  const originalPage = srcDoc.getPage(i);
+  const { width, height } = originalPage.getSize();
+  const embeddedPage = await outputDoc.embedPage(originalPage);
 
-      const embeddedPage = await outputDoc.embedPage(originalPage);
+  const isLabel = i % 2 === 0;
+  const crop = isLabel ? CROP.label : CROP.invoice;
 
-      let cropTop = 0, cropBottom = 0;
-      let cropHeight = height, cropWidth = width;
+  const cropWidth = width - crop.left - crop.right;
+  const cropHeight = height - crop.top - crop.bottom;
 
-      if (i % 2 === 0) {
-        // LABEL (e.g., top half)
-        cropTop = 0;
-        cropBottom = height / 2;
-      } else {
-        // INVOICE (e.g., bottom half)
-        cropTop = height / 2;
-        cropBottom = 0;
-      }
+  const newPage = outputDoc.addPage([cropWidth, cropHeight]);
+  newPage.drawPage(embeddedPage, {
+    x: -crop.left,
+    y: -crop.bottom
+  });
 
-      cropHeight = height / 2;
-
-      const newPage = outputDoc.addPage([cropWidth, cropHeight]);
-
-      newPage.drawPage(embeddedPage, {
-        x: 0,
-        y: -cropBottom
-      });
-
-      console.log(`Page ${i + 1} - ${i % 2 === 0 ? 'Label' : 'Invoice'} processed`);
-    }
+  console.log(`Page ${i + 1} processed as ${isLabel ? 'Label' : 'Invoice'}`);
+}
 
     const fileName = `processed_${uuidv4()}.pdf`;
     const filePathOutput = path.join(publicDir, fileName);
