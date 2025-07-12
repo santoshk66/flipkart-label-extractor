@@ -60,25 +60,25 @@ app.post('/process-labels', upload.single('label'), async (req, res) => {
   const { width, height } = page.getSize();
   const embeddedPage = await outputDoc.embedPage(page);
 
-  const labelHeight = 460; // top portion
-  const invoiceStartY = height - labelHeight;
-  const invoiceHeight = labelHeight > height ? height : height - labelHeight;
+  const labelHeight = 460; // Height to crop for label
+  const invoiceHeight = height - labelHeight;
 
-  // ✅ 1. LABEL page (top cropped)
+  // ✅ LABEL in Portrait
   const labelPage = outputDoc.addPage([width, labelHeight]);
   labelPage.drawPage(embeddedPage, {
     x: 0,
-    y: -invoiceStartY
+    y: -invoiceHeight // shift full page up to show label only
   });
 
-  // ✅ 2. INVOICE page (crop bottom portion only — no masking!)
-  const invoicePage = outputDoc.addPage([width, invoiceHeight]);
+  // ✅ INVOICE in Landscape
+  const invoicePage = outputDoc.addPage([height, width]); // Rotate page
   invoicePage.drawPage(embeddedPage, {
     x: 0,
-    y: 0
+    y: -invoiceHeight,
+    rotate: degrees(90) // Rotate invoice content 90°
   });
 
-  console.log(`Processed Page ${i + 1} into LABEL and full INVOICE (not masked)`);
+  console.log(`Page ${i + 1}: Label (Portrait) + Invoice (Landscape)`);
 }
 
 
