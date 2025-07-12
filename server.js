@@ -3,7 +3,7 @@ const multer = require('multer');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs').promises;
-const { PDFDocument, rgb, StandardFonts, degrees } = require('pdf-lib');
+const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
 const pdfParse = require('pdf-parse');
 const { v4: uuidv4 } = require('uuid');
 
@@ -55,32 +55,11 @@ app.post('/process-labels', upload.single('label'), async (req, res) => {
 
     const totalPages = srcDoc.getPageCount();
 
-    for (let i = 0; i < srcDoc.getPageCount(); i++) {
-  const page = srcDoc.getPage(i);
-  const { width, height } = page.getSize();
-  const embeddedPage = await outputDoc.embedPage(page);
-
-  const labelHeight = 460; // Height to crop for label
-  const invoiceHeight = height - labelHeight;
-
-  // ✅ LABEL in Portrait
-  const labelPage = outputDoc.addPage([width, labelHeight]);
-  labelPage.drawPage(embeddedPage, {
-    x: 0,
-    y: -invoiceHeight // shift full page up to show label only
-  });
-
-  // ✅ INVOICE in Landscape
-  const invoicePage = outputDoc.addPage([height, width]); // Rotate page
-  invoicePage.drawPage(embeddedPage, {
-    x: 0,
-    y: -invoiceHeight,
-    rotate: degrees(90) // Rotate invoice content 90°
-  });
-
-  console.log(`Page ${i + 1}: Label (Portrait) + Invoice (Landscape)`);
-}
-
+    for (let i = 0; i < totalPages; i++) {
+      const [copiedPage] = await outputDoc.copyPages(srcDoc, [i]);
+      outputDoc.addPage(copiedPage);
+      console.log(`Page ${i + 1} copied`);
+    }
 
     const fileName = `processed_${uuidv4()}.pdf`;
     const filePathOutput = path.join(publicDir, fileName);
