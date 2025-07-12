@@ -12,7 +12,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Ensure directories exist
 const publicDir = path.join(__dirname, 'public');
-const uploadsDir = path.join(__dirname, 'uploads');
+const uploadsDir = path.join(__dirname, 'Uploads');
 
 const ensureDir = async (dir) => {
   try {
@@ -92,18 +92,28 @@ app.post('/split-label-invoice', upload.single('label'), async (req, res) => {
       }
 
       try {
-        // Label Page (top 40% of the page)
-        const labelPage = newDoc.addPage([width * 0.9, height * 0.4]);
+        // Crop margins: 10% from left and right, adjust top/bottom for label/invoice
+        const cropMarginX = width * 0.1; // 10% from each side
+        const croppedWidth = width * 0.8; // 80% of original width
+
+        // Label Page (top ~40% of the page, cropped)
+        const labelHeight = height * 0.4;
+        const labelPage = newDoc.addPage([croppedWidth, labelHeight]);
         labelPage.drawPage(original, {
-          x: -width * 0.05, // slight crop from left
-          y: -height * 0.6  // crop bottom
+          x: -cropMarginX, // Crop left margin
+          y: -height * 0.6 + cropMarginX * 0.5, // Crop bottom, adjust for slight top margin
+          width: croppedWidth,
+          height: labelHeight
         });
 
-        // Invoice Page (bottom 55% of the page)
-        const invoicePage = newDoc.addPage([width * 0.9, height * 0.55]);
+        // Invoice Page (bottom ~55% of the page, cropped)
+        const invoiceHeight = height * 0.55;
+        const invoicePage = newDoc.addPage([croppedWidth, invoiceHeight]);
         invoicePage.drawPage(original, {
-          x: -width * 0.05, // slight crop left
-          y: -height * 0.05 // crop top slightly
+          x: -cropMarginX, // Crop left margin
+          y: -cropMarginX * 0.5, // Crop top slightly
+          width: croppedWidth,
+          height: invoiceHeight
         });
       } catch (drawError) {
         console.warn(`Failed to process page ${i + 1}: ${drawError.message}`);
@@ -112,7 +122,7 @@ app.post('/split-label-invoice', upload.single('label'), async (req, res) => {
     }
 
     if (newDoc.getPageCount() === 0) {
-      throw new Error('No valid pages were processed.');
+      throw new Error('No valid pages were processed. Please check the input PDF.');
     }
 
     const finalPDF = await newDoc.save();
