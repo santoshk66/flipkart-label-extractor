@@ -32,36 +32,30 @@ app.post('/split-label-invoice', upload.single('label'), async (req, res) => {
 
     for (let i = 0; i < totalPages; i++) {
       const page = srcDoc.getPage(i);
-      const { width, height } = page.getSize();
       const embeddedPage = await newDoc.embedPage(page);
 
-      const cropMarginX = width * 0.1;
-      const cropMarginY = height * 0.05;
-      const usableWidth = width * 0.8;
-
-      // Label (top 40%)
-      const labelHeight = height * 0.4;
-      const labelPage = newDoc.addPage([usableWidth, labelHeight]);
+      // === CROPPING BASED ON STANDARD FLIPKART FORMAT (A4: 595x842) ===
+      // LABEL AREA: from Y = 842 - 10 (top margin) - 470 (label height)
+      const labelPage = newDoc.addPage([283, 470]);
       labelPage.drawPage(embeddedPage, {
-        x: -cropMarginX,
-        y: -(height - labelHeight - cropMarginY),
-        width,
-        height
+        x: -155, // crop from left to center thermal format
+        y: -(842 - 10 - 470),
+        width: 595,
+        height: 842
       });
 
-      // Invoice (bottom 60%)
-      const invoiceHeight = height * 0.6;
-      const invoicePage = newDoc.addPage([usableWidth, invoiceHeight]);
+      // INVOICE AREA: from Y = 842 - 490 (bottom area start)
+      const invoicePage = newDoc.addPage([283, 330]);
       invoicePage.drawPage(embeddedPage, {
-        x: -cropMarginX,
-        y: -cropMarginY,
-        width,
-        height
+        x: -155,
+        y: -490,
+        width: 595,
+        height: 842
       });
     }
 
     const outputPdf = await newDoc.save();
-    const fileName = `split_label_invoice_${uuidv4()}.pdf`;
+    const fileName = `flipkart_crop_standard_{uuidv4()}.pdf`;
     const outputPath = path.join(__dirname, 'public', fileName);
     await fs.writeFile(outputPath, outputPdf);
     await fs.unlink(req.file.path).catch(() => {});
