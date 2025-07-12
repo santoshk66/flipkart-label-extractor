@@ -66,6 +66,10 @@ function extractProductNames(text) {
 }
 
 function matchToSku(productLine) {
+  if (Object.keys(productSkuMap).length === 0) {
+    return DEFAULT_SKU;
+  }
+
   const keys = Object.keys(productSkuMap);
   for (let key of keys) {
     if (productLine.toLowerCase().includes(key)) {
@@ -74,6 +78,7 @@ function matchToSku(productLine) {
   }
   return DEFAULT_SKU;
 }
+
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
