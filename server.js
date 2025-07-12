@@ -32,14 +32,7 @@ const upload = multer({
   }
 });
 
-// Crop dimensions (tight cropping for labels and invoices)
-const CROP = {
-  left: 70,
-  right: 70,
-  top: 120,
-  bottom: 120
-};
-
+// No cropping, direct page placement
 app.post('/process-labels', upload.single('label'), async (req, res) => {
   const publicDir = path.join(__dirname, 'public');
   const uploadsDir = path.join(__dirname, 'Uploads');
@@ -55,10 +48,24 @@ app.post('/process-labels', upload.single('label'), async (req, res) => {
 
     const totalPages = srcDoc.getPageCount();
 
-    for (let i = 0; i < totalPages; i++) {
-      const [copiedPage] = await outputDoc.copyPages(srcDoc, [i]);
-      outputDoc.addPage(copiedPage);
-      console.log(`Page ${i + 1} copied`);
+    // Assuming first page is label, second is invoice
+    if (totalPages >= 2) {
+      const [labelPage] = await outputDoc.copyPages(srcDoc, [0]);
+      const [invoicePage] = await outputDoc.copyPages(srcDoc, [1]);
+
+      // Set page dimensions to match input pages without margins
+      const labelWidth = labelPage.getWidth();
+      const labelHeight = labelPage.getHeight();
+      const invoiceWidth = invoicePage.getWidth();
+      const invoiceHeight = invoicePage.getHeight();
+
+      const newLabelPage = outputDoc.addPage([labelWidth, labelHeight]);
+      newLabelPage.drawPage(labelPage, { x: 0, y: 0, width: labelWidth, height: labelHeight });
+
+      const newInvoicePage = outputDoc.addPage([invoiceWidth, invoiceHeight]);
+      newInvoicePage.drawPage(invoicePage, { x: 0, y: 0, width: invoiceWidth, height: invoiceHeight });
+    } else {
+      return res.status(400).json({ error: 'PDF must contain at least 2 pages (label and invoice).' });
     }
 
     const fileName = `processed_${uuidv4()}.pdf`;
@@ -74,7 +81,6 @@ app.post('/process-labels', upload.single('label'), async (req, res) => {
     if (filePath) await fs.unlink(filePath).catch(console.error);
   }
 });
-
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, async () => {
