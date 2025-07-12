@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Flipkart Label Tool</title>
+  <title>Flipkart Label & Invoice Tool</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
     h2 { color: #333; text-align: center; }
@@ -13,7 +13,7 @@
     .loader { display: none; border: 4px solid #f3f3f3; border-top: 4px solid #28a745; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; margin: 10px auto; }
     @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     #result { margin-top: 20px; text-align: center; }
-    #result a { color: #007bff; text-decoration: none; margin: 0 10px; display: inline-block; }
+    #result a { color: #007bff; text-decoration: none; display: inline-block; }
     #result a:hover { text-decoration: underline; }
     .error { color: #dc3545; font-weight: bold; }
     .success { color: #28a745; font-weight: bold; }
@@ -54,14 +54,9 @@
           throw new Error(data.error || `Server error: ${res.status}`);
         }
 
-        if (data.labelDownload || data.invoiceDownload) {
-          resultDiv.innerHTML = '<span class="success">Processing complete!</span><br>';
-          if (data.labelDownload) {
-            resultDiv.innerHTML += `<a href="${data.labelDownload}" target="_blank">Download Labels PDF</a>`;
-          }
-          if (data.invoiceDownload) {
-            resultDiv.innerHTML += `<a href="${data.invoiceDownload}" target="_blank">Download Invoices PDF</a>`;
-          }
+        if (data.download) {
+          resultDiv.innerHTML = `<span class="success">Processing complete!</span><br>
+                                <a href="${data.download}" target="_blank">Download Processed PDF</a>`;
         } else {
           resultDiv.innerHTML = '<span class="error">No labels or invoices found in the PDF.</span>';
         }
