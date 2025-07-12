@@ -60,23 +60,27 @@ for (let i = 0; i < srcDoc.getPageCount(); i++) {
   const { width, height } = page.getSize();
   const embeddedPage = await outputDoc.embedPage(page);
 
-  // ✅ 1. LABEL (Top ~45%)
-  const labelHeight = height * 0.45;
-  const labelPage = outputDoc.addPage([width, labelHeight]);
+  // Adjust crop heights (450 px for label, rest for invoice)
+  const labelCropHeight = 450;
+  const invoiceCropHeight = height - labelCropHeight;
+
+  // ✅ LABEL page (top part)
+  const labelPage = outputDoc.addPage([width, labelCropHeight]);
   labelPage.drawPage(embeddedPage, {
     x: 0,
-    y: -(height - labelHeight) // shift up to keep top part
+    y: -invoiceCropHeight // shift full page up to show top 450px
   });
 
-  // ✅ 2. INVOICE (Re-render full page, no crop or split)
-  const invoicePage = outputDoc.addPage([width, height]);
+  // ✅ INVOICE page (bottom part only)
+  const invoicePage = outputDoc.addPage([width, invoiceCropHeight]);
   invoicePage.drawPage(embeddedPage, {
     x: 0,
-    y: 0
+    y: 0 // stay in place to show bottom part (no re-adding label)
   });
 
-  console.log(`Processed Page ${i + 1}: Label + Invoice`);
+  console.log(`Page ${i + 1} split into LABEL + INVOICE`);
 }
+
 
 
 
