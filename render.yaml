@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: flipkart-label-extractor
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    autoDeploy: true
+    branch: main
