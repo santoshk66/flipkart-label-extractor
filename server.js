@@ -32,12 +32,12 @@ const upload = multer({
   }
 });
 
-// Crop dimensions (tighter cropping for labels and invoices)
+// Crop dimensions (tight cropping for labels and invoices)
 const CROP = {
-  left: 60,
-  right: 60,
-  top: 100,
-  bottom: 100
+  left: 70,
+  right: 70,
+  top: 120,
+  bottom: 120
 };
 
 app.post('/process-labels', upload.single('label'), async (req, res) => {
@@ -93,9 +93,9 @@ app.post('/process-labels', upload.single('label'), async (req, res) => {
       });
 
       if (isLabel) {
-        let sku = "default";
-        const match = pageText.match(/SKU\s*[:|\s]\s*([A-Za-z0-9-]+)/);
-        if (match && match[1] && match[1].toLowerCase() !== 'qty') {
+        let sku = "Unknown";
+        const match = pageText.match(/SKU\s*[:|\s-]*([A-Za-z0-9-]+)/i) || pageText.match(/([A-Za-z0-9-]{6,})/);
+        if (match && match[1] && match[1].toLowerCase() !== 'qty' && !match[1].match(/^[0-9\s.]+$/)) {
           sku = match[1];
         }
 
