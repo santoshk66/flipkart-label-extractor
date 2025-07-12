@@ -55,7 +55,7 @@ app.post('/split-label-invoice', upload.single('label'), async (req, res) => {
     }
 
     const outputPdf = await newDoc.save();
-    const fileName = `flipkart_exact_${uuidv4()}.pdf`;
+    const fileName = `flipkart_crop_standard_{uuidv4()}.pdf`;
     const outputPath = path.join(__dirname, 'public', fileName);
     await fs.writeFile(outputPath, outputPdf);
     await fs.unlink(req.file.path).catch(() => {});
