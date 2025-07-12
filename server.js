@@ -10,7 +10,6 @@ const app = express();
 app.use(cors());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Multer setup
 const upload = multer({
   dest: 'Uploads/',
   fileFilter: (req, file, cb) => {
@@ -34,11 +33,22 @@ app.post('/split-label-invoice', upload.single('label'), async (req, res) => {
     const totalPages = srcDoc.getPageCount();
     const pageIndices = [...Array(totalPages).keys()];
     const pages = await srcDoc.copyPages(srcDoc, pageIndices);
+
     let processed = 0;
 
     for (let i = 0; i < pages.length; i++) {
       const original = pages[i];
+      if (!original || typeof original.getSize !== 'function') {
+        console.warn(`Skipping page ${i + 1} due to invalid page object.`);
+        continue;
+      }
+
       const { width, height } = original.getSize();
+      if (!width || !height || isNaN(width) || isNaN(height)) {
+        console.warn(`Invalid dimensions on page ${i + 1}`);
+        continue;
+      }
+
       const marginX = width * 0.1, marginY = height * 0.05;
       const usableWidth = width * 0.8;
 
