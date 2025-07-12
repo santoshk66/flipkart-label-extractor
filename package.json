@@ -1,7 +1,6 @@
 {
   "name": "flipkart-label-extractor",
   "version": "1.0.0",
-  "description": "Flipkart label splitting tool",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
