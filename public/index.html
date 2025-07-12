@@ -1,25 +1,64 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Split Flipkart Label & Invoice</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+    .error { color: red; display: none; }
+    .loading { display: none; }
+  </style>
 </head>
 <body>
   <h2>Upload Flipkart Label PDF</h2>
-  <input type="file" id="pdf"><button onclick="splitPDF()">Split PDF</button><br><br>
+  <input type="file" id="pdf" accept="application/pdf">
+  <button onclick="splitPDF()">Split PDF</button>
+  <p id="loading" class="loading">Processing...</p>
+  <p id="error" class="error"></p>
   <div id="download" style="display:none;">
     <h3>Result:</h3>
-    <a href="/split_label_invoice.pdf" download>Download Split Label + Invoice PDF</a>
+    <a id="downloadLink" href="#" download>Download Split Label + Invoice PDF</a>
   </div>
 
   <script>
     async function splitPDF() {
-      const file = document.getElementById('pdf').files[0];
-      const formData = new FormData();
-      formData.append('label', file);
-      const res = await fetch('/split-label-invoice', { method: 'POST', body: formData });
-      const data = await res.json();
-      if (data.download) {
-        document.getElementById('download').style.display = 'block';
+      const fileInput = document.getElementById('pdf');
+      const errorEl = document.getElementById('error');
+      const loadingEl = document.getElementById('loading');
+      const downloadEl = document.getElementById('download');
+      const downloadLink = document.getElementById('downloadLink');
+
+      if (!fileInput.files[0]) {
+        errorEl.textContent = 'Please select a PDF file.';
+        errorEl.style.display = 'block';
+        return;
+      }
+
+      errorEl.style.display = 'none';
+      loadingEl.style.display = 'block';
+      downloadEl.style.display = 'none';
+
+      try {
+        const formData = new FormData();
+        formData.append('label', fileInput.files[0]);
+        const res = await fetch('/split-label-invoice', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+
+        if (res.ok && data.download) {
+          downloadLink.href = data.download;
+          downloadEl.style.display = 'block';
+        } else {
+          throw new Error(data.error || 'Failed to process PDF.');
+        }
+      } catch (error) {
+        errorEl.textContent = error.message;
+        errorEl.style.display = 'block';
+      } finally {
+        loadingEl.style.display = 'none';
       }
     }
   </script>
